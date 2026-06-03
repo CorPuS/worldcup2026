@@ -17,6 +17,8 @@ function isAdminUser(user) {
 
 let toastInstance = null;
 let supportEditAllowed = true;
+const matchDataCache = {}; // matchId -> match document data
+
 function updateSupportEditAllowed(allowed) {
   supportEditAllowed = allowed;
   const note = document.getElementById("support-note");
@@ -86,9 +88,7 @@ function renderMatchPredictions(predictions, usersMap, currentUid, actual) {
         </thead>
         <tbody>
           ${sorted.map(pred => {
-            const displayName = pred.userId === currentUid
-              ? 'You'
-              : usersMap[pred.userId]?.displayName || usersMap[pred.userId]?.email || pred.userId;
+            const displayName = usersMap[pred.userId]?.displayName || usersMap[pred.userId]?.email || pred.userId;
             const points = score(pred, actual);
             const highlightStart = pred.userId === currentUid ? '<strong>' : '';
             const highlightEnd = pred.userId === currentUid ? '</strong>' : '';
@@ -253,10 +253,26 @@ async function loadMatches() {
 
     const m = doc.data();
     const matchId = doc.id;
+    matchDataCache[matchId] = m;   // cache for lazy accordion loading
+
     const pred = predictions[matchId] || null;
     const ONE_HOUR = 60 * 60 * 1000;
     const matchTime = m.datetime?.toMillis?.() ?? 0;
     const editable = now < (matchTime - ONE_HOUR);
+    const hasResult = !!m.result;
+
+    // Result cell: plain dash, or a clickable toggle when a result exists
+    const resultCell = hasResult
+      ? `<button class="btn btn-link btn-sm p-0 fw-bold text-decoration-none match-preds-toggle"
+                 type="button"
+                 data-bs-toggle="collapse"
+                 data-bs-target="#preds-${matchId}"
+                 aria-expanded="false"
+                 aria-controls="preds-${matchId}"
+                 onclick="loadMatchPredictions('${matchId}')">
+           ${m.result.home}:${m.result.away}&nbsp;<span class="chevron text-muted">▾</span>
+         </button>`
+      : '-';
 
     container.innerHTML += `
       <tr>
@@ -290,19 +306,84 @@ async function loadMatches() {
         </td>
 
         <td class="text-center align-middle">
-          ${m.result ? `${m.result.home}:${m.result.away}` : "-"}
+          ${resultCell}
         </td>
 
         <td class="align-middle">
           ${editable
             ? `<button class="btn btn-primary btn-sm" onclick="save('${matchId}')">Save</button>`
-            : (m.result && pred ? score(pred, m.result) : ` -`)}
+            : (hasResult && pred ? score(pred, m.result) : `-`)}
         </td>
       </tr>
+      ${hasResult ? `
+        <tr class="match-preds-row">
+          <td colspan="6" class="p-0 border-0">
+            <div class="collapse" id="preds-${matchId}">
+              <div class="p-3 bg-light border-top" id="preds-content-${matchId}">
+                <div class="text-muted small">Loading predictions…</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      ` : ''}
     `;
   });
 }
 
+
+/* =========================
+   MATCH PREDICTIONS PANEL
+========================= */
+async function loadMatchPredictions(matchId) {
+
+  const contentEl = document.getElementById(`preds-content-${matchId}`);
+  if (!contentEl || contentEl.dataset.loaded === 'true') return;
+
+  const matchData = matchDataCache[matchId];
+  if (!matchData?.result) return;
+
+  contentEl.innerHTML = '<div class="text-muted small py-1">Loading predictions…</div>';
+
+  try {
+    // Leaderboard is publicly readable and contains uid + displayName for every player
+    const leaderboardSnap = await db.collection("leaderboard").get();
+    const usersMap = {};
+    leaderboardSnap.forEach(doc => {
+      const data = doc.data();
+      usersMap[data.uid] = data;
+    });
+
+    // Fetch every user's prediction for this match in parallel
+    const allPreds = [];
+    await Promise.all(
+      Object.keys(usersMap).map(async uid => {
+        try {
+          const predDoc = await db.collection("predictions")
+            .doc(uid)
+            .collection("matches")
+            .doc(matchId)
+            .get();
+          if (predDoc.exists) {
+            allPreds.push({ userId: uid, ...predDoc.data() });
+          }
+        } catch (_) {
+          // No prediction for this match – skip silently
+        }
+      })
+    );
+
+    const currentUid = auth.currentUser?.uid;
+    contentEl.innerHTML = `
+      <div class="small fw-semibold mb-2 text-secondary">All predictions for this match:</div>
+      ${renderMatchPredictions(allPreds, usersMap, currentUid, matchData.result)}
+    `;
+    contentEl.dataset.loaded = 'true';
+
+  } catch (err) {
+    console.error("loadMatchPredictions failed:", err);
+    contentEl.innerHTML = `<div class="text-danger small">Failed to load predictions: ${escapeHtml(err.message)}</div>`;
+  }
+}
 
 /* =========================
    SAVE PREDICTION
