@@ -276,7 +276,7 @@ async function loadMatches() {
 
     container.innerHTML += `
       <tr>
-        <td>
+        <td class="text-muted small">
             ${new Date(m.datetime.toDate())
               .toLocaleString("lt-LT")
               .replace("T", " ")
@@ -288,7 +288,7 @@ async function loadMatches() {
           ${m.teamA}
         </td>
 
-        <td class="text-center align-middle">
+        <td class="text-center align-middle" style="width:190px;">
           ${editable ? `
             <input type="number" min="0" class="form-control d-inline-block"
                    style="width:70px; margin-right:4px;" id="a-${matchId}"
@@ -476,11 +476,6 @@ async function loadAdminMatches() {
           ${m.teamA}
         </td>
 
-        <td class="align-middle">
-          ${m.teamB}
-          <img src="${flag(flags[m.teamB])}" class="flag">
-        </td>
-
         <td class="text-center align-middle">
           <input type="number" min="0" class="form-control d-inline-block"
                  style="width:70px; margin-right:4px;" id="admin-a-${matchId}"
@@ -489,6 +484,11 @@ async function loadAdminMatches() {
           <input type="number" min="0" class="form-control d-inline-block"
                  style="width:70px;" id="admin-b-${matchId}"
                  value="${result.away ?? ''}">
+        </td>
+
+        <td class="align-middle">
+          ${m.teamB}
+          <img src="${flag(flags[m.teamB])}" class="flag">
         </td>
 
         <td class="align-middle">
@@ -670,7 +670,7 @@ async function loadLeaderboardInto(containerId) {
     rows += `
       <tr>
         <td class="align-middle">${index}</td>
-        <td class="align-middle">${displayNameHtml}</td>
+        <td>${displayNameHtml}</td>
         <td class="text-center align-middle">${exactScores}</td>
         <td class="text-end align-middle">${displayScore}</td>
       </tr>
@@ -683,7 +683,7 @@ async function loadLeaderboardInto(containerId) {
       <table class="table table-sm table-hover mb-0">
         <thead class="table-light">
           <tr>
-            <th style="width: 40px;">#</th>
+            <th style="width:20px;">#</th>
             <th>Name</th>
             <th class="text-center">Exact guesses</th>
             <th class="text-end">Points</th>
