@@ -420,7 +420,21 @@ async function save(matchId) {
     });
 
   showToast("Prediction saved ✓", 'success');
+
+  // Preserve any unsaved values the user has typed into other match inputs
+  const unsavedInputs = {};
+  document.querySelectorAll('input[id^="a-"], input[id^="b-"]').forEach(input => {
+    unsavedInputs[input.id] = input.value;
+  });
+  
   await loadMatches();
+
+  // Restore unsaved values after the table is re-rendered
+  Object.entries(unsavedInputs).forEach(([id, value]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  });
+  
 }
 
 
